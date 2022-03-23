@@ -18,7 +18,7 @@ class SPamCo:
     update_add_num: int = 6
     sel_ids: list = field(default_factory=list)
     weights: list = field(default_factory=list)
-    scores: list = field(default_factory=list)
+    scores: list = field(default_factory=list) 
         
     def __str__(self):
         #todo: Print a clean representation of the perceptron
@@ -27,13 +27,17 @@ class SPamCo:
         print(f'Scores:\t{self.scores}')
         print(f'num_view:\t{self.num_view}')
         print(f'Gamma:\t{self.gamma}')
+        print(f'Labels:\t{self.labels}')
+
+    def get_classifiers(self):
+        return self.clfs
    
-    def update_train(self, pred_y):
-        add_ids = np.where(np.array(self.sel_ids) != 0)[0]
+    def update_train(self, view, pred_y):
+        add_ids = np.where(np.array(self.sel_ids[view]) != 0)[0]
         add_data = [d[add_ids] for d in self.unlabeled_data]
         new_train_data = [np.concatenate([d1, d2]) for d1,d2 in zip(self.labeled_data, add_data)]
         add_y = pred_y[add_ids]
-        new_train_y = np.concatenate([self.labels, pred_y[add_ids]])
+        new_train_y = np.concatenate([self.labels, add_y])
         return new_train_data, new_train_y
 
     def get_lambda_class(self, view, pred_y):
@@ -47,12 +51,12 @@ class SPamCo:
             indices = np.where(pred_y == cls)[0]
             if len(indices) == 0:
                 continue
-            cls_score = self.scores[indices, cls]
+            cls_score = self.scores[view][indices, cls]
             idx_sort = np.argsort(cls_score)
             add_num = min(int(np.ceil(ratio_per_class[cls] * self.add_num)),
                           indices.shape[0])
-            add_ids[indices[idx_sort[-self.add_num:]]] = 1
-            lambdas[cls] = cls_score[idx_sort[-self.add_num]] - 0.1
+            add_ids[indices[idx_sort[-add_num:]]] = 1
+            lambdas[cls] = cls_score[idx_sort[-add_num]] - 0.1
         return add_ids.astype('bool'), lambdas
 
     def get_ids_weights(self, view, pred_y):
@@ -65,10 +69,12 @@ class SPamCo:
         '''
         #print('Getting Lambdas')
         add_ids, lambdas = self.get_lambda_class(view, pred_y)
+
         #print('Getting Weights')
-        weight = np.array([(self.scores[i, l] - lambdas[l]) / (self.gamma + 1e-5)
+        weight = np.array([(self.scores[view][i, l] - lambdas[l]) / (self.gamma + 1e-5)
                            for i, l in enumerate(pred_y)],
                           dtype='float32')
+
         weight[~add_ids] = 0
         if self.regularizer == 'hard' or self.gamma == 0:
             weight[add_ids] = 1
@@ -102,7 +108,7 @@ class SPamCo:
         # initiate weights for unlabled examples
         print('Initiating weights for unlabeled examples')
         for view in range(self.num_view):
-            sel_id, weight = self.get_ids_weights(self.scores[view], pred_y)
+            sel_id, weight = self.get_ids_weights(view, pred_y)
             
             self.sel_ids.append(sel_id)
             self.weights.append(weight)
@@ -110,26 +116,29 @@ class SPamCo:
         print(f'Running {self.iterations} steps')
         pred_y = np.argmax(sum(self.scores), axis = 1)
         for step in range(self.iterations):
-            for view in range(2):
+            for view in range(self.num_view):
 
-                # Update v
+                # Update Training data
                 self.sel_ids[view], self.weights[view] = self.update_ids_weights(
                     view,
                     pred_y
                 )
+                new_labeled_data, new_labels = self.update_train(view, pred_y)
 
-                #update w
-                new_labeled_data, new_labels = self.update_train(pred_y)
+                # Update parameters
                 self.clfs[view].fit(new_labeled_data[view], new_labels)
+                self.scores[view] = self.clfs[view].predict_proba(self.unlabeled_data[view])
+                
+                # Update predictions
+                pred_y = np.argmax(sum(self.scores), axis = 1)
 
-                add_num += update_add_num
-                # udpate sample weights
+                # Update lambda
+                self.add_num += self.update_add_num
+
+                # Update Training data
                 self.sel_ids[view], self.weights[view] = self.update_ids_weights(
                     view,
                     pred_y
                 )
-
-                pred_y = np.argmax(sum(self.scores[view]), axis = 1)
 
             if len(new_labeled_data[0]) >= len(self.unlabeled_data[0]): break
-        return clfs
