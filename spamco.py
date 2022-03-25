@@ -145,93 +145,93 @@ class SPamCo:
 
             if len(new_labeled_data[0]) >= len(self.unlabeled_data[0]): break
                 
-class validation:
+class Validation:
     @staticmethod
     def validation(model_params, train_data_x, train_data_y, percent_labeled, random_seed, spaco=False, single_view=False, cv=False, folds=5, iters=100 ):
     
-    metrics = []
-    
-    if cv:
-        return metrics
-    else:
-        for step in range(iters):            
-            if spaco:
-                l_data = []
-                u_data = []
-                predictions = []
+        metrics = []
 
-                x_train_val, x_test_val, y_train_val, y_test_val = train_test_split(
-                    train_data_x, 
-                    train_data_y, 
-                    test_size=0.30,
-                    stratify=train_data_y,
-                    random_state=random_seed[step]
-                )
+        if cv:
+            return metrics
+        else:
+            for step in range(iters):            
+                if spaco:
+                    l_data = []
+                    u_data = []
+                    predictions = []
 
-                x_train, x_test, y_train, y_test = train_test_split(
-                    x_train_val, 
-                    y_train_val, 
-                    test_size=1 - percent_labeled,
-                    stratify=y_train_val,
-                    random_state=random_seed[step]
-                )
-                if single_view:
-                    l_data.append(x_train)
-                    u_data.append(x_test)
-                    
-                    spaco = SPamCo(
-                        labeled_data=l_data,
-                        unlabeled_data=u_data,
-                        labels=y_train,
-                        num_view=model_params.get('num_view'),
-                        gamma=model_params.get('gamma'),
-                        iterations=model_params.get('steps'),
-                        regularizer=model_params.get('regularizer')
+                    x_train_val, x_test_val, y_train_val, y_test_val = train_test_split(
+                        train_data_x, 
+                        train_data_y, 
+                        test_size=0.30,
+                        stratify=train_data_y,
+                        random_state=random_seed[step]
                     )
-                    
-                    spaco.fit(model_params('classifier'))
-                    clfs = spaco.get_classifiers()
-                    pred_y = clfs[0].predict(x_test_val)
-                    accuracy = accuracy_score(pred_y, y_test_val)
-                    metrics.append(accuracy)
+
+                    x_train, x_test, y_train, y_test = train_test_split(
+                        x_train_val, 
+                        y_train_val, 
+                        test_size=1 - percent_labeled,
+                        stratify=y_train_val,
+                        random_state=random_seed[step]
+                    )
+                    if single_view:
+                        l_data.append(x_train)
+                        u_data.append(x_test)
+
+                        spaco = SPamCo(
+                            labeled_data=l_data,
+                            unlabeled_data=u_data,
+                            labels=y_train,
+                            num_view=model_params.get('num_view'),
+                            gamma=model_params.get('gamma'),
+                            iterations=model_params.get('steps'),
+                            regularizer=model_params.get('regularizer')
+                        )
+
+                        spaco.fit(model_params('classifier'))
+                        clfs = spaco.get_classifiers()
+                        pred_y = clfs[0].predict(x_test_val)
+                        accuracy = accuracy_score(pred_y, y_test_val)
+                        metrics.append(accuracy)
+                    else:
+                        for i in range(x_train.shape[1]):
+                            l_data.append(x_train[:,i].reshape(-1,1))
+                            u_data.append(x_test[:,i].reshape(-1,1))
+
+                        spaco = SPamCo(
+                            labeled_data=l_data,
+                            unlabeled_data=u_data,
+                            labels=y_train,
+                            num_view=x_train.shape[1],
+                            gamma=model_params.get('gamma'),
+                            iterations=model_params.get('steps'),
+                            regularizer=model_params.get('regularizer')
+                        )
+                        spaco.fit(model_params.get('classifier'))
+                        clfs = spaco.get_classifiers()
+
+                        for view in range(len(clfs)):
+                            pred = clfs[view].predict_proba(x_test_val[:,view].reshape(-1,1))
+                            predictions.append(pred)
+
+                        pred_y = np.argmax(sum(predictions), axis = 1)
+                        accuracy = accuracy_score(pred_y, y_test_val)
+                        metrics.append(accuracy)
                 else:
-                    for i in range(x_train.shape[1]):
-                        l_data.append(x_train[:,i].reshape(-1,1))
-                        u_data.append(x_test[:,i].reshape(-1,1))
-                        
-                    spaco = SPamCo(
-                        labeled_data=l_data,
-                        unlabeled_data=u_data,
-                        labels=y_train,
-                        num_view=x_train.shape[1],
-                        gamma=model_params.get('gamma'),
-                        iterations=model_params.get('steps'),
-                        regularizer=model_params.get('regularizer')
+
+                    x_train, x_test, y_train, y_test = train_test_split(
+                        train_data_x, 
+                        train_data_y, 
+                        test_size=0.30,
+                        stratify=train_data_y,
+                        random_state=random_seed[step]
                     )
-                    spaco.fit(model_params.get('classifier'))
-                    clfs = spaco.get_classifiers()
-                    
-                    for view in range(len(clfs)):
-                        pred = clfs[view].predict_proba(x_test_val[:,view].reshape(-1,1))
-                        predictions.append(pred)
-                    
-                    pred_y = np.argmax(sum(predictions), axis = 1)
-                    accuracy = accuracy_score(pred_y, y_test_val)
-                    metrics.append(accuracy)
-            else:
 
-                x_train, x_test, y_train, y_test = train_test_split(
-                    train_data_x, 
-                    train_data_y, 
-                    test_size=0.30,
-                    stratify=train_data_y,
-                    random_state=random_seed[step]
-                )
-                
-                clf = model_params.get('classifier')
-                clf.fit(x_train, y_train)
+                    clf = model_params.get('classifier')
+                    clf.fit(x_train, y_train)
 
-                clf_pred = clf.predict(x_test)
-                metrics.append(accuracy_score(clf_pred, y_test))
-    
-    return metrics  
+                    clf_pred = clf.predict(x_test)
+                    metrics.append(accuracy_score(clf_pred, y_test))
+
+        return metrics  
