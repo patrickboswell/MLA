@@ -234,4 +234,4 @@ class Validation:
                     clf_pred = clf.predict(x_test)
                     metrics.append(accuracy_score(clf_pred, y_test))
 
-        return metrics  
+        return spaco, metrics  
