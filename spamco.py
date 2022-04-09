@@ -147,7 +147,7 @@ class SPamCo:
                 
 class Validation:
     @staticmethod
-    def validation(model_params, train_data_x, train_data_y, percent_labeled, random_seed, spaco=False, single_view=False, cv=False, folds=5, iters=100 ):
+    def validation(model_params, train_data_x, train_data_y, percent_labeled, random_seed, spaco=False, single_view=False, cv=False, folds=5, iters=100, verbosity=10 ):
     
         metrics = []
 
@@ -189,11 +189,13 @@ class Validation:
                             regularizer=model_params.get('regularizer')
                         )
 
-                        spaco.fit(model_params('classifier'))
+                        spaco.fit(model_params.get('classifier'))
                         clfs = spaco.get_classifiers()
                         pred_y = clfs[0].predict(x_test_val)
                         accuracy = accuracy_score(pred_y, y_test_val)
                         metrics.append(accuracy)
+                        if step % verbosity == 0:
+                            print(f'Validation Iteration: {step} Accuracy: {accuracy} Labels: {len(y_train)}')
                     else:
                         for i in range(x_train.shape[1]):
                             l_data.append(x_train[:,i].reshape(-1,1))
@@ -218,9 +220,11 @@ class Validation:
                         pred_y = np.argmax(sum(predictions), axis = 1)
                         accuracy = accuracy_score(pred_y, y_test_val)
                         metrics.append(accuracy)
+                        if step % verbosity == 0:
+                            print(f'Validation Iteration: {step} Accuracy: {accuracy} Labels: {len(y_train)}')
                 else:
 
-                    x_train, x_test, y_train, y_test = train_test_split(
+                    x_train_val, x_test_val, y_train_val, y_test_val = train_test_split(
                         train_data_x, 
                         train_data_y, 
                         test_size=0.30,
@@ -228,10 +232,22 @@ class Validation:
                         random_state=random_seed[step]
                     )
 
+                    x_train, x_test, y_train, y_test = train_test_split(
+                        x_train_val, 
+                        y_train_val, 
+                        test_size=1 - percent_labeled,
+                        stratify=y_train_val,
+                        random_state=random_seed[step]
+                    )
+
                     clf = model_params.get('classifier')
                     clf.fit(x_train, y_train)
 
-                    clf_pred = clf.predict(x_test)
-                    metrics.append(accuracy_score(clf_pred, y_test))
+                    clf_pred = clf.predict(x_test_val)
+                    accuracy = accuracy_score(clf_pred, y_test_val)
+                    metrics.append(accuracy)
+                    if step % verbosity == 0:
+                        print(f'Validation Iteration: {step} Accuracy: {accuracy} Labels: {len(y_train)}')
+                    
 
         return spaco, metrics  
