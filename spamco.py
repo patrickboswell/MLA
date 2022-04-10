@@ -147,7 +147,7 @@ class SPamCo:
                 
 class Validation:
     @staticmethod
-    def validation(model_params, train_data_x, train_data_y, percent_labeled, random_seed, spaco=False, single_view=False, cv=False, folds=5, iters=100, verbosity=10 ):
+    def validation(model_params, train_data_x, train_data_y, percent_labeled, random_seed, spaco=False, single_view=False, cv=False, folds=5, iters=100, verbosity=10, hsplit=False, hsplit_size = 2 ):
     
         metrics = []
 
@@ -159,7 +159,7 @@ class Validation:
                     l_data = []
                     u_data = []
                     predictions = []
-
+                    
                     x_train_val, x_test_val, y_train_val, y_test_val = train_test_split(
                         train_data_x, 
                         train_data_y, 
@@ -175,9 +175,11 @@ class Validation:
                         stratify=y_train_val,
                         random_state=random_seed[step]
                     )
+
                     if single_view:
-                        l_data.append(x_train)
-                        u_data.append(x_test)
+                        for i in range(2):
+                            l_data.append(x_train)
+                            u_data.append(x_test)
 
                         spaco = SPamCo(
                             labeled_data=l_data,
@@ -196,6 +198,36 @@ class Validation:
                         metrics.append(accuracy)
                         if step % verbosity == 0:
                             print(f'Validation Iteration: {step} Accuracy: {accuracy} Labels: {len(y_train)}')
+                    if hsplit:
+                        
+                        l_data = np.hsplit(x_train, hsplit_size)
+                        u_data = np.hsplit(x_test, hsplit_size)
+                        
+                        x_test_val_split = np.hsplit(x_test_val, hsplit_size)
+
+                        spaco = SPamCo(
+                            labeled_data=l_data,
+                            unlabeled_data=u_data,
+                            labels=y_train,
+                            num_view=hsplit_size,
+                            gamma=model_params.get('gamma'),
+                            iterations=model_params.get('steps'),
+                            regularizer=model_params.get('regularizer')
+                        )
+                        spaco.fit(model_params.get('classifier'))
+                        clfs = spaco.get_classifiers()
+
+                        for view in range(hsplit_size):
+                            pred = clfs[view].predict_proba(x_test_val_split[view])
+                            predictions.append(pred)
+                        
+                        pred_y = np.argmax(sum(predictions), axis = 1)
+
+                        accuracy = accuracy_score(pred_y, y_test_val)
+                        metrics.append(accuracy)
+                        if step % verbosity == 0:
+                            print(f'Validation Iteration: {step} Accuracy: {accuracy} Labels: {len(y_train)}')
+                        
                     else:
                         for i in range(x_train.shape[1]):
                             l_data.append(x_train[:,i].reshape(-1,1))
@@ -216,8 +248,9 @@ class Validation:
                         for view in range(len(clfs)):
                             pred = clfs[view].predict_proba(x_test_val[:,view].reshape(-1,1))
                             predictions.append(pred)
-
+                        
                         pred_y = np.argmax(sum(predictions), axis = 1)
+
                         accuracy = accuracy_score(pred_y, y_test_val)
                         metrics.append(accuracy)
                         if step % verbosity == 0:
