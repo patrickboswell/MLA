@@ -200,10 +200,10 @@ class Validation:
                             print(f'Validation Iteration: {step} Accuracy: {accuracy} Labels: {len(y_train)}')
                     if hsplit:
                         
-                        l_data = np.hsplit(x_train, hsplit_size)
-                        u_data = np.hsplit(x_test, hsplit_size)
+                        l_data = np.array_split(x_train, hsplit_size, axis=1)
+                        u_data = np.array_split(x_test, hsplit_size, axis=1)
                         
-                        x_test_val_split = np.hsplit(x_test_val, hsplit_size)
+                        x_test_val_split = np.array_split(x_test_val, hsplit_size, axis=1)
 
                         spaco = SPamCo(
                             labeled_data=l_data,
