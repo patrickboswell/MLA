@@ -20,7 +20,7 @@ class SPamCo:
     update_add_num: int = 6
     sel_ids: list = field(default_factory=list)
     weights: list = field(default_factory=list)
-    scores: list = field(default_factory=list) 
+    scores: list = field(default_factory=list)
         
     def __str__(self):
         #todo: Print a clean representation of the perceptron
@@ -97,11 +97,15 @@ class SPamCo:
         sel_id, weight = self.get_ids_weights(view, pred_y)
         return sel_id, weight
     
-    def fit(self, classifier):
+    def fit(self, classifier, multiple_classifiers = False):
         
         #print('Intiating first classifiers and predictions')
         for view in range(self.num_view):
-            self.clfs.append(classifier)
+            if multiple_classifiers:
+                self.clfs.append(classifier[view])
+            else:
+                self.clfs.append(classifier)
+            
             self.clfs[view].fit(self.labeled_data[view], self.labels)
             self.scores.append(self.clfs[view].predict_proba(self.unlabeled_data[view]))
   
@@ -147,35 +151,36 @@ class SPamCo:
                 
 class Validation:
     @staticmethod
-    def validation(model_params, train_data_x, train_data_y, percent_labeled, random_seed, spaco=False, single_view=False, cv=False, folds=5, iters=100, verbosity=10, hsplit=False, hsplit_size = 2 ):
+    def validation(model_params, train_data_x, train_data_y, percent_labeled, random_seed, spaco=False, single_view=False, cv=False, folds=5, iters=100, verbosity=10, hsplit=False, hsplit_size = 2, multiple_classifiers=False):
     
         metrics = []
 
         if cv:
             return metrics
         else:
-            for step in range(iters):            
+            for step in range(iters):
+                
+                x_train_val, x_test_val, y_train_val, y_test_val = train_test_split(
+                    train_data_x, 
+                    train_data_y, 
+                    test_size=0.30,
+                    stratify=train_data_y,
+                    random_state=random_seed[step]
+                )
+
+                x_train, x_test, y_train, y_test = train_test_split(
+                    x_train_val, 
+                    y_train_val, 
+                    test_size=1 - percent_labeled,
+                    stratify=y_train_val,
+                    random_state=random_seed[step]
+                )
+                
                 if spaco:
                     l_data = []
                     u_data = []
                     predictions = []
                     
-                    x_train_val, x_test_val, y_train_val, y_test_val = train_test_split(
-                        train_data_x, 
-                        train_data_y, 
-                        test_size=0.30,
-                        stratify=train_data_y,
-                        random_state=random_seed[step]
-                    )
-
-                    x_train, x_test, y_train, y_test = train_test_split(
-                        x_train_val, 
-                        y_train_val, 
-                        test_size=1 - percent_labeled,
-                        stratify=y_train_val,
-                        random_state=random_seed[step]
-                    )
-
                     if single_view:
                         for i in range(2):
                             l_data.append(x_train)
@@ -188,7 +193,8 @@ class Validation:
                             num_view=model_params.get('num_view'),
                             gamma=model_params.get('gamma'),
                             iterations=model_params.get('steps'),
-                            regularizer=model_params.get('regularizer')
+                            regularizer=model_params.get('regularizer'),
+                            update_add_num=model_params.get('update_add_num')
                         )
 
                         spaco.fit(model_params.get('classifier'))
@@ -212,13 +218,44 @@ class Validation:
                             num_view=hsplit_size,
                             gamma=model_params.get('gamma'),
                             iterations=model_params.get('steps'),
-                            regularizer=model_params.get('regularizer')
+                            regularizer=model_params.get('regularizer'),
+                            update_add_num=model_params.get('update_add_num')
                         )
                         spaco.fit(model_params.get('classifier'))
                         clfs = spaco.get_classifiers()
 
                         for view in range(hsplit_size):
                             pred = clfs[view].predict_proba(x_test_val_split[view])
+                            predictions.append(pred)
+                        
+                        pred_y = np.argmax(sum(predictions), axis = 1)
+
+                        accuracy = accuracy_score(pred_y, y_test_val)
+                        metrics.append(accuracy)
+                        if step % verbosity == 0:
+                            print(f'Validation Iteration: {step} Accuracy: {accuracy} Labels: {len(y_train)}')
+                    if multiple_classifiers:
+                        for i in range(model_params.get('num_view')):
+                            l_data.append(x_train)
+                            u_data.append(x_test)
+
+                        spaco = SPamCo(
+                            labeled_data=l_data,
+                            unlabeled_data=u_data,
+                            labels=y_train,
+                            num_view=model_params.get('num_view'),
+                            gamma=model_params.get('gamma'),
+                            iterations=model_params.get('steps'),
+                            regularizer=model_params.get('regularizer'),
+                            update_add_num=model_params.get('update_add_num')
+                        )
+
+                        spaco.fit(model_params.get('classifier'), model_params.get('multiple_classifiers'))
+                        
+                        clfs = spaco.get_classifiers()
+                        
+                        for view in range(len(clfs)):
+                            pred = clfs[view].predict_proba(x_test_val)
                             predictions.append(pred)
                         
                         pred_y = np.argmax(sum(predictions), axis = 1)
@@ -240,7 +277,8 @@ class Validation:
                             num_view=x_train.shape[1],
                             gamma=model_params.get('gamma'),
                             iterations=model_params.get('steps'),
-                            regularizer=model_params.get('regularizer')
+                            regularizer=model_params.get('regularizer'),
+                            update_add_num=model_params.get('update_add_num')
                         )
                         spaco.fit(model_params.get('classifier'))
                         clfs = spaco.get_classifiers()
@@ -256,22 +294,6 @@ class Validation:
                         if step % verbosity == 0:
                             print(f'Validation Iteration: {step} Accuracy: {accuracy} Labels: {len(y_train)}')
                 else:
-
-                    x_train_val, x_test_val, y_train_val, y_test_val = train_test_split(
-                        train_data_x, 
-                        train_data_y, 
-                        test_size=0.30,
-                        stratify=train_data_y,
-                        random_state=random_seed[step]
-                    )
-
-                    x_train, x_test, y_train, y_test = train_test_split(
-                        x_train_val, 
-                        y_train_val, 
-                        test_size=1 - percent_labeled,
-                        stratify=y_train_val,
-                        random_state=random_seed[step]
-                    )
 
                     clf = model_params.get('classifier')
                     clf.fit(x_train, y_train)
