@@ -204,7 +204,7 @@ class Validation:
                         metrics.append(accuracy)
                         if step % verbosity == 0:
                             print(f'Validation Iteration: {step} Accuracy: {accuracy} Labels: {len(y_train)}')
-                    if hsplit:
+                    elif hsplit:
                         
                         l_data = np.array_split(x_train, hsplit_size, axis=1)
                         u_data = np.array_split(x_test, hsplit_size, axis=1)
@@ -234,7 +234,7 @@ class Validation:
                         metrics.append(accuracy)
                         if step % verbosity == 0:
                             print(f'Validation Iteration: {step} Accuracy: {accuracy} Labels: {len(y_train)}')
-                    if multiple_classifiers:
+                    elif multiple_classifiers:
                         for i in range(model_params.get('num_view')):
                             l_data.append(x_train)
                             u_data.append(x_test)
