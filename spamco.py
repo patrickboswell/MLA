@@ -4,6 +4,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
+from sklearn import preprocessing
 
 @dataclass
 class SPamCo:
@@ -148,6 +149,39 @@ class SPamCo:
                 )
 
             if len(new_labeled_data[0]) >= len(self.unlabeled_data[0]): break
+    
+    
+    def predict_proba(self, X):
+        
+        pred_proba = []
+        clfs = self.get_classifiers()
+
+        for view in range(0, len(clfs)):
+            pred = clfs[view].predict_proba(X[:,view].reshape(-1,1))
+            pred_proba.append(pred)
+            
+        total_proba = sum(pred_proba)
+        norm_proba = preprocessing.normalize(total_proba, norm='l1') 
+            
+        return norm_proba
+    
+    def predict(self, X):
+        
+        pred_proba = self.predict_proba(X)
+
+        pred_y = np.argmax(pred_proba, axis = 1)
+
+        return pred_y
+    
+    def score(self, X, y):
+        
+        pred_y = self.predict(X)
+        
+        accuracy = accuracy_score(pred_y, y)
+        
+        return accuracy
+    
+    
                 
 class Validation:
     @staticmethod
